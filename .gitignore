@@ -154,3 +154,4 @@ cython_debug/
 lib
 tex
 *.pickle
+randtex.ini

@@ -6,10 +6,12 @@
 # todo add similar/disimilar flat (for patch) and patch (for flat)
 # todo setup poetry so my dependencies work with each other properly
 
+import pathlib
 
 import sys
 import io
 import random
+import configparser
 
 from colormath.color_objects import LabColor, sRGBColor
 from colormath.color_conversions import convert_color
@@ -31,6 +33,7 @@ import pickle
 
 WINDOW_TITLE = "randtex"
 
+CONFIG_PATH = "randtex.ini"
 CACHED_TEXTURE_PACK_SUFFIX = ".pickle"
 
 COMMAND_SEPARATOR = "|"
@@ -47,6 +50,29 @@ HELP_SIMILARITY_FACTOR = """Similarity/Disimilarity factors must be a value betw
     2-10: Perceptible at a glance
     11-49: Colors are more similar than the opposite
     100: Colors are exactly the opposite"""
+
+
+class Config:
+    def __init__(self) -> None:
+        self.config = configparser.ConfigParser(defaults={"texture_pack_path": ""})
+        self._load()
+
+    def config_path(self):
+        return pathlib.Path(__file__).parent.absolute() / CONFIG_PATH
+
+    def _load(self):
+        pathlib.Path(self.config_path()).touch()
+        self.config.read(self.config_path())
+
+    def save(self):
+        with open(self.config_path(), "w") as configfile:
+            self.config.write(configfile)
+
+    def set_previous_texture_pack_path(self, texture_pack_path):
+        self.config["DEFAULT"]["texture_pack_path"] = texture_pack_path
+
+    def get_previous_texture_pack_path(self):
+        return self.config["DEFAULT"]["texture_pack_path"]
 
 
 def get_cached_texture_pack_path(path_to_texture_pack):
@@ -144,12 +170,13 @@ def cached():
     return decorator  # return this "customized" decorator that uses "cachefile"
 
 
-def show_get_texture_pack_window():
+def show_get_texture_pack_window(texture_pack_path):
+    print(texture_pack_path)
     layout = [
         [sg.Text("Choose texture pack to load")],
         [
             sg.Text("Texture Pack", size=(15, 1)),
-            sg.InputText(key="-file-"),
+            sg.InputText(key="-file-", default_text=texture_pack_path),
             sg.FileBrowse(),
         ],
         [sg.Submit(), sg.Cancel()],
@@ -159,11 +186,12 @@ def show_get_texture_pack_window():
     while True:
         event, values = window.read()
         if event == sg.WINDOW_CLOSED:
-            break
+            sys.exit()
         if values["-file-"] and os.path.exists(values["-file-"]):
             window.close()
             wad = load_wad(values["-file-"])
             return (
+                values["-file-"],
                 wad,
                 list(wad["flats"].keys()),
                 list(wad["patches"].keys()),
@@ -241,11 +269,16 @@ EVENT_RESET = "Reset All"
 
 
 def main():
+    config = Config()
     flats = []
     patches = []
     similarity_factor = 20
     disimilarity_factor = 40
-    wad, all_flats, all_patches = show_get_texture_pack_window()
+    texture_pack_path, wad, all_flats, all_patches = show_get_texture_pack_window(
+        config.get_previous_texture_pack_path()
+    )
+    config.set_previous_texture_pack_path(texture_pack_path)
+    config.save()
     while True:
         flat_images = []
         for f in flats:
