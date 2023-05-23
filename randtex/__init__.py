@@ -1,8 +1,8 @@
 # todo undo/redo + refactor code using command strategy
-# todo click on texture to display a big version of it
 # todo save/load sequence of events/commands
 # todo save/load set of flats/patches
 # todo add similar/disimilar flat (for patch) and patch (for flat)
+# todo setup logging
 
 
 import pathlib
@@ -84,15 +84,16 @@ def does_cached_texture_pack_exist(path_to_texture_pack):
 
 
 def show_preview_image_window(im, k):
-    d = create_image_data(im, resize_factor=6)
+    d = create_image_data(im, resize_factor=5)
     layout = [
-        [sg.Image(data=d)],
+        [sg.Image(data=d, enable_events=True)],
     ]
     window = sg.Window(k, layout)
     while True:
         event, values = window.read()
         if event == sg.WINDOW_CLOSED:
             break
+        break
     window.close()
 
 
@@ -175,7 +176,7 @@ def cached():
             cache_filepath = get_cached_texture_pack_path(args[0])
             if os.path.exists(cache_filepath):
                 with open(cache_filepath, "rb") as cachehandle:
-                    print("using cached result from '%s'" % cache_filepath)
+                    # print("using cached result from '%s'" % cache_filepath)
                     return pickle.load(cachehandle)
 
             # execute the function with all arguments passed
@@ -183,7 +184,7 @@ def cached():
 
             # write to cache file
             with open(cache_filepath, "wb") as cachehandle:
-                print("saving result to cache '%s'" % cache_filepath)
+                # print("saving result to cache '%s'" % cache_filepath)
                 pickle.dump(res, cachehandle)
 
             return res
@@ -194,7 +195,6 @@ def cached():
 
 
 def show_get_texture_pack_window(texture_pack_path):
-    print(texture_pack_path)
     layout = [
         [sg.Text("Choose texture pack to load")],
         [
@@ -221,20 +221,32 @@ def show_get_texture_pack_window(texture_pack_path):
             )
 
 
+def find_similar_by_color(
+    similar_to_color, current, keys, colors, factor, disimilar=False
+):
+    if not current:
+        return None
+    # todo deal with multiple colors at once?
+
+    random.shuffle(keys)
+    for k in keys:
+        if k not in current:
+            d = delta_e_cie1976(similar_to_color, colors[k][0])
+            if not disimilar and d < factor or disimilar and d > factor:
+                # print(f"d={d} for added flat {f} compared to {similar_to}")
+                return k
+    return None
+
+
 def find_similar(similar_to_index, current, keys, colors, factor, disimilar=False):
+    # todo deal with multiple colors at once?
     if not current:
         return None
     similar_to = current[similar_to_index]
-    # todo deal with multiple colors at once?
     similar_to_color = colors[similar_to][0]
-    random.shuffle(keys)
-    for f in keys:
-        if f not in current:
-            d = delta_e_cie1976(similar_to_color, colors[f][0])
-            if not disimilar and d < factor or disimilar and d > factor:
-                print(f"d={d} for added flat {f} compared to {similar_to}")
-                return f
-    return None
+    return find_similar_by_color(
+        similar_to_color, current, keys, colors, factor, disimilar
+    )
 
 
 def dominant_colors(image):  # PIL image input
@@ -286,12 +298,14 @@ def load_wad(wad_path):
     }
 
 
-EVENT_ADD_RANDOM_FLAT = "Add"
-EVENT_ADD_RANDOM_PATCH = "Add​"
+EVENT_ADD_RANDOM_FLAT = "Add Random Flat"
+EVENT_ADD_RANDOM_PATCH = "Add Random Patch​"
 EVENT_RESET = "Reset All"
 
 
 def main():
+    skip_window_close = False
+    window = None
     config = Config()
     flats = []
     patches = []
@@ -314,14 +328,12 @@ def main():
         layout = [
             [
                 sg.Text(
-                    f"- Click on a flat/patch to see a larger version of it\n- {HELP_SIMILARITY_FACTOR}"
+                    f"Texture Pack: {os.path.basename(texture_pack_path)} | # Flats: {len(all_flats)} | # Patches: {len(all_patches)}"
                 )
             ],
-            [
-                sg.Text(
-                    f"- Right-click on a flat/patch to access features\n- {HELP_SIMILARITY_FACTOR}"
-                )
-            ],
+            [sg.Text(f"- Click on a flat/patch to see a larger version of it")],
+            [sg.Text(f"- Right-click on a flat/patch to access features")],
+            [sg.Text(f"{HELP_SIMILARITY_FACTOR}")],
             [
                 sg.Text("Similarity Factor"),
                 sg.InputText(
@@ -339,16 +351,21 @@ def main():
                 sg.Text("Flats"),
                 sg.Button(EVENT_ADD_RANDOM_FLAT),
             ],
-            flat_images,
+            flat_images if flat_images else [sg.Text("\n\n\n\n\n\n\n\n")],
             [
                 sg.Text("Patches"),
                 sg.Button(EVENT_ADD_RANDOM_PATCH),
             ],
-            [patch_images],
+            patch_images if patch_images else [sg.Text("\n\n\n\n\n\n\n\n")],
         ]
 
-        window = sg.Window(WINDOW_TITLE, layout)
-
+        old_window_location = (
+            window.current_location() if window is not None else (None, None)
+        )
+        if window is not None and not skip_window_close:
+            skip_window_close = False
+            window.close()
+        window = sg.Window(WINDOW_TITLE, layout, location=old_window_location)
         event, values = window.read()
         if event == sg.WINDOW_CLOSED:
             break
@@ -356,15 +373,12 @@ def main():
         tex = None
         if event and COMMAND_SEPARATOR in event:
             tex, event = event.split(COMMAND_SEPARATOR, 1)
-        print(tex)
-        print(event)
         try:
             similarity_factor = float(values["-similarity_factor-"])
             if similarity_factor < 0.0 or similarity_factor >= 100.0:
                 raise ValueError
         except ValueError:
             sg.popup_error(HELP_SIMILARITY_FACTOR)
-            window.close()
             continue
         try:
             disimilarity_factor = float(values["-disimilarity_factor-"])
@@ -372,16 +386,15 @@ def main():
                 raise ValueError
         except ValueError:
             sg.popup_error(HELP_SIMILARITY_FACTOR)
-            window.close()
             continue
         if event == EVENT_ADD_RANDOM_FLAT:
             f = all_flats[random.randint(0, len(all_flats))]
-            print(f"Adding flat {f}")
+            # print(f"Adding flat {f}")
             flats += [f]
         if event == EVENT_ADD_RANDOM_PATCH:
             p = all_patches[random.randint(0, len(all_patches))]
             patches += [p]
-            print(f"Adding patch {p}")
+            # print(f"Adding patch {p}")
         if event == EVENT_RESET:
             flats = []
             patches = []
@@ -477,15 +490,16 @@ def main():
                         patches[i] = p
             except ValueError:
                 pass
-        window.close()
         if flats and event in flats:
-            # Clicking on an image
-            # todo
+            # Clicking on an flat
             im = wad["flat_images"][event]
             show_preview_image_window(im, event)
+            skip_window_close = True
         if patches and event in patches:
+            # Clicking on an patch
             im = wad["patch_images"][event]
             show_preview_image_window(im, event)
+            skip_window_close = True
 
 
 if __name__ == "__main__":
