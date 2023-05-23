@@ -21,12 +21,12 @@ import os
 import pickle
 
 COMMAND_SEPARATOR = "|"
-COMMAND_RANDOMIZE = "Randomize this"
+COMMAND_RANDOMIZE = "Randomize"
 COMMAND_CHANGE_SIMILAR = "Change to something similar"
 COMMAND_CHANGE_DISIMILAR = "Change to something disimilar"
-COMMAND_ADD_SIMILAR = "Add something similar to this"
-COMMAND_ADD_DISIMILAR = "Add something disimilar to this"
-COMMAND_DELETE = "Delete this"
+COMMAND_ADD_SIMILAR = "Add something similar"
+COMMAND_ADD_DISIMILAR = "Add something disimilar"
+COMMAND_DELETE = "Delete"
 
 HELP_SIMILARITY_FACTOR = """Similarity/Disimilarity factors must be a value between 0.0 and 100.0 (lower numbers mean more similar)
     <= 1.0: Not perceptible by the human eye
@@ -36,17 +36,41 @@ HELP_SIMILARITY_FACTOR = """Similarity/Disimilarity factors must be a value betw
     100: Colors are exactly the opposite"""
 
 
-def create_image_right_click_menu(key):
+def create_image_buttons_top(key):
     return [
-        "&Edit",
-        [
-            f"{key}{COMMAND_SEPARATOR}{COMMAND_RANDOMIZE}",
-            f"{key}{COMMAND_SEPARATOR}{COMMAND_CHANGE_SIMILAR}",
-            f"{key}{COMMAND_SEPARATOR}{COMMAND_CHANGE_DISIMILAR}",
-            f"{key}{COMMAND_SEPARATOR}{COMMAND_ADD_SIMILAR}",
-            f"{key}{COMMAND_SEPARATOR}{COMMAND_ADD_DISIMILAR}",
-            f"{key}{COMMAND_SEPARATOR}{COMMAND_DELETE}",
-        ],
+        sg.Button(
+            "🎲",
+            tooltip=COMMAND_RANDOMIZE,
+            key=f"{key}{COMMAND_SEPARATOR}{COMMAND_RANDOMIZE}",
+        ),
+        sg.Button(
+            "/∽",
+            tooltip=COMMAND_CHANGE_SIMILAR,
+            key=f"{key}{COMMAND_SEPARATOR}{COMMAND_CHANGE_SIMILAR}",
+        ),
+        sg.Button(
+            "/≠",
+            tooltip=COMMAND_CHANGE_DISIMILAR,
+            key=f"{key}{COMMAND_SEPARATOR}{COMMAND_CHANGE_DISIMILAR}",
+        ),
+    ]
+
+
+def create_image_buttons_bot(key):
+    return [
+        sg.Button(
+            "+∽",
+            tooltip=COMMAND_ADD_SIMILAR,
+            key=f"{key}{COMMAND_SEPARATOR}{COMMAND_ADD_SIMILAR}",
+        ),
+        sg.Button(
+            "+≠",
+            tooltip=COMMAND_ADD_DISIMILAR,
+            key=f"{key}{COMMAND_SEPARATOR}{COMMAND_ADD_DISIMILAR}",
+        ),
+        sg.Button(
+            "X", tooltip=COMMAND_DELETE, key=f"{key}{COMMAND_SEPARATOR}{COMMAND_DELETE}"
+        ),
     ]
 
 
@@ -170,9 +194,7 @@ def main():
         wad = load_wad(r"C:\Users\Bill Tyros\Documents\GitHub\randtex\tex\OTEX_1.1.WAD")
         all_flats = list(wad["flats"].keys())
         all_patches = list(wad["patches"].keys())
-    # Display and interact with the Window using an Event Loop
     while True:
-        # Define the window's contents
         flat_images = []
         for f in flats:
             im = wad["flat_images"][f]
@@ -184,14 +206,9 @@ def main():
                 sg.Frame(
                     f,
                     [
-                        [
-                            sg.Image(
-                                key=f,
-                                data=bio.getvalue(),
-                                enable_events=True,
-                                right_click_menu=create_image_right_click_menu(f),
-                            ),
-                        ]
+                        create_image_buttons_top(f),
+                        create_image_buttons_bot(f),
+                        [sg.Image(key=f, data=bio.getvalue())],
                     ],
                 )
             ]
@@ -206,21 +223,16 @@ def main():
                 sg.Frame(
                     p,
                     [
-                        [
-                            sg.Image(
-                                key=p,
-                                data=bio.getvalue(),
-                                enable_events=True,
-                                right_click_menu=create_image_right_click_menu(p),
-                            )
-                        ]
+                        create_image_buttons_top(p),
+                        create_image_buttons_bot(p),
+                        [sg.Image(key=p, data=bio.getvalue())],
                     ],
                 )
             ]
         layout = [
             [
                 sg.Text(
-                    f"- Click on a flat/patch to randomize it.\n- Right-click on a flat/patch to access features\n- {HELP_SIMILARITY_FACTOR}"
+                    f"- Right-click on a flat/patch to access features\n- {HELP_SIMILARITY_FACTOR}"
                 )
             ],
             [
@@ -299,26 +311,14 @@ def main():
                 patches.remove(tex)
             except ValueError:
                 pass
-        if (
-            event == COMMAND_RANDOMIZE
-            or flats
-            and event in flats
-            or patches
-            and event in patches
-        ):
+        if event == COMMAND_RANDOMIZE:
             try:
-                if event == COMMAND_RANDOMIZE:
-                    i = flats.index(tex)
-                else:
-                    i = flats.index(event)
+                i = flats.index(tex)
                 flats[i] = all_flats[random.randint(0, len(all_flats))]
             except ValueError:
                 pass
             try:
-                if event == COMMAND_RANDOMIZE:
-                    i = patches.index(tex)
-                else:
-                    i = patches.index(event)
+                i = patches.index(tex)
                 patches[i] = all_patches[random.randint(0, len(all_patches))]
             except ValueError:
                 pass
