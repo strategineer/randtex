@@ -74,6 +74,29 @@ class Config:
         return self.config["DEFAULT"]["texture_pack_path"]
 
 
+def export_to_wad(wad_path, flats, patches):
+    wad = WAD(from_file="template/MAP01.wad")
+    m = MapEditor(wad.maps["MAP01"])
+    z = (0, 0)
+
+    for f, p in zip(flats, patches):
+        sector = Sector()
+        sector.tx_floor = f
+        sector.tx_ceil = "-"
+        sidedef = Sidedef()
+        sidedef.tx_low = p
+        sidedef.tx_up = p
+        zx, zy = z
+        m.draw_sector(
+            [z, (zx + 64, zy), (zx + 64, zy + 64), (zx + 0, zy + 64)],
+            sector=sector,
+            sidedef=sidedef,
+        )
+        z = (zx + 64, zy)
+    wad.maps["MAP01"] = m.to_lumps()
+    wad.to_file(wad_path)
+
+
 def get_cached_texture_pack_path(path_to_texture_pack):
     prefix = os.path.basename(path_to_texture_pack)
     return f"{prefix}{CACHED_TEXTURE_PACK_SUFFIX}"
@@ -301,6 +324,7 @@ def load_wad(wad_path):
 EVENT_ADD_RANDOM_FLAT = "Add Random Flat"
 EVENT_ADD_RANDOM_PATCH = "Add Random Patch​"
 EVENT_RESET = "Reset All"
+EVENT_EXPORT_TEMPLATE_WAD = "Export template wad"
 
 
 def main():
@@ -346,6 +370,7 @@ def main():
                     size=(5, 1),
                 ),
                 sg.Button(EVENT_RESET),
+                sg.Button(EVENT_EXPORT_TEMPLATE_WAD),
             ],
             [
                 sg.Text("Flats"),
@@ -388,16 +413,19 @@ def main():
             sg.popup_error(HELP_SIMILARITY_FACTOR)
             continue
         if event == EVENT_ADD_RANDOM_FLAT:
-            f = all_flats[random.randint(0, len(all_flats))]
+            f = all_flats[random.randint(0, len(all_flats) - 1)]
             # print(f"Adding flat {f}")
             flats += [f]
         if event == EVENT_ADD_RANDOM_PATCH:
-            p = all_patches[random.randint(0, len(all_patches))]
+            p = all_patches[random.randint(0, len(all_patches) - 1)]
             patches += [p]
             # print(f"Adding patch {p}")
         if event == EVENT_RESET:
             flats = []
             patches = []
+        if event == EVENT_EXPORT_TEMPLATE_WAD:
+            # todo add a filebrowser for this
+            export_to_wad("test.wad", flats, patches)
 
         if event == COMMAND_DELETE:
             try:
@@ -411,12 +439,12 @@ def main():
         if event == COMMAND_RANDOMIZE:
             try:
                 i = flats.index(tex)
-                flats[i] = all_flats[random.randint(0, len(all_flats))]
+                flats[i] = all_flats[random.randint(0, len(all_flats) - 1)]
             except ValueError:
                 pass
             try:
                 i = patches.index(tex)
-                patches[i] = all_patches[random.randint(0, len(all_patches))]
+                patches[i] = all_patches[random.randint(0, len(all_patches) - 1)]
             except ValueError:
                 pass
         if event == COMMAND_ADD_SIMILAR or event == COMMAND_CHANGE_SIMILAR:

@@ -155,3 +155,5 @@ lib
 tex
 *.pickle
 randtex.ini
+template/MAP01.dbs
+test.wad
