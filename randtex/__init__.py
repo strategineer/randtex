@@ -4,6 +4,7 @@
 # todo save/load set of flats/patches
 # todo add similar/disimilar flat (for patch) and patch (for flat)
 
+
 import pathlib
 
 import sys
@@ -82,18 +83,42 @@ def does_cached_texture_pack_exist(path_to_texture_pack):
     return os.path.exists(get_cached_texture_pack_path(path_to_texture_pack))
 
 
-def create_image(im, k):
+def show_preview_image_window(im, k):
+    d = create_image_data(im, resize_factor=6)
+    layout = [
+        [sg.Image(data=d)],
+    ]
+    window = sg.Window(k, layout)
+    while True:
+        event, values = window.read()
+        if event == sg.WINDOW_CLOSED:
+            break
+    window.close()
+
+
+def create_image_data(im, resize_factor=0):
     bio = io.BytesIO()
     im = im.copy()
-    im.thumbnail((64, 64))
+    if resize_factor > 0:
+        im = im.resize(
+            (im.width * resize_factor, im.height * resize_factor),
+            resample=Image.Resampling.NEAREST,
+        )
+    else:
+        im.thumbnail((64, 64))
     im.save(bio, format="PNG")
+    return bio.getvalue()
+
+
+def create_image(im, k):
+    d = create_image_data(im)
     return [
         sg.Frame(
             k,
             [
                 create_image_buttons_top(k),
                 create_image_buttons_bot(k),
-                [sg.Image(key=k, data=bio.getvalue())],
+                [sg.Image(key=k, data=d, enable_events=True)],
             ],
         )
     ]
@@ -289,6 +314,11 @@ def main():
         layout = [
             [
                 sg.Text(
+                    f"- Click on a flat/patch to see a larger version of it\n- {HELP_SIMILARITY_FACTOR}"
+                )
+            ],
+            [
+                sg.Text(
                     f"- Right-click on a flat/patch to access features\n- {HELP_SIMILARITY_FACTOR}"
                 )
             ],
@@ -448,6 +478,14 @@ def main():
             except ValueError:
                 pass
         window.close()
+        if flats and event in flats:
+            # Clicking on an image
+            # todo
+            im = wad["flat_images"][event]
+            show_preview_image_window(im, event)
+        if patches and event in patches:
+            im = wad["patch_images"][event]
+            show_preview_image_window(im, event)
 
 
 if __name__ == "__main__":
