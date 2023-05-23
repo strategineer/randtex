@@ -1,3 +1,12 @@
+# todo undo/redo + refactor code using command strategy
+# todo click on texture to display a big version of it
+# todo save/load sequence of events/commands
+# todo save/load set of flats/patches
+# todo add initial texture pack browser dialog
+# todo add similar/disimilar flat (for patch) and patch (for flat)
+# todo setup poetry so my dependencies work with each other properly
+
+
 import sys
 import io
 import random
@@ -20,6 +29,10 @@ from PIL import Image
 import os
 import pickle
 
+WINDOW_TITLE = "randtex"
+
+CACHED_TEXTURE_PACK_SUFFIX = ".pickle"
+
 COMMAND_SEPARATOR = "|"
 COMMAND_RANDOMIZE = "Randomize"
 COMMAND_CHANGE_SIMILAR = "Change to something similar"
@@ -34,6 +47,32 @@ HELP_SIMILARITY_FACTOR = """Similarity/Disimilarity factors must be a value betw
     2-10: Perceptible at a glance
     11-49: Colors are more similar than the opposite
     100: Colors are exactly the opposite"""
+
+
+def get_cached_texture_pack_path(path_to_texture_pack):
+    prefix = os.path.basename(path_to_texture_pack)
+    return f"{prefix}{CACHED_TEXTURE_PACK_SUFFIX}"
+
+
+def does_cached_texture_pack_exist(path_to_texture_pack):
+    return os.path.exists(get_cached_texture_pack_path(path_to_texture_pack))
+
+
+def create_image(im, k):
+    bio = io.BytesIO()
+    im = im.copy()
+    im.thumbnail((64, 64))
+    im.save(bio, format="PNG")
+    return [
+        sg.Frame(
+            k,
+            [
+                create_image_buttons_top(k),
+                create_image_buttons_bot(k),
+                [sg.Image(key=k, data=bio.getvalue())],
+            ],
+        )
+    ]
 
 
 def create_image_buttons_top(key):
@@ -74,7 +113,7 @@ def create_image_buttons_bot(key):
     ]
 
 
-def cached(cachefile):
+def cached():
     """
     A function that creates a decorator which will use "cachefile" for caching the results of the decorated function "fn".
     """
@@ -84,19 +123,18 @@ def cached(cachefile):
             *args, **kwargs
         ):  # define a wrapper that will finally call "fn" with all arguments
             # if cache exists -> load it and return its content
-            prefix = os.path.basename(args[0])
-            cachefile_with_prefix = f"{prefix}{cachefile}"
-            if os.path.exists(cachefile_with_prefix):
-                with open(cachefile_with_prefix, "rb") as cachehandle:
-                    print("using cached result from '%s'" % cachefile_with_prefix)
+            cache_filepath = get_cached_texture_pack_path(args[0])
+            if os.path.exists(cache_filepath):
+                with open(cache_filepath, "rb") as cachehandle:
+                    print("using cached result from '%s'" % cache_filepath)
                     return pickle.load(cachehandle)
 
             # execute the function with all arguments passed
             res = fn(*args, **kwargs)
 
             # write to cache file
-            with open(cachefile_with_prefix, "wb") as cachehandle:
-                print("saving result to cache '%s'" % cachefile_with_prefix)
+            with open(cache_filepath, "wb") as cachehandle:
+                print("saving result to cache '%s'" % cache_filepath)
                 pickle.dump(res, cachehandle)
 
             return res
@@ -104,6 +142,32 @@ def cached(cachefile):
         return wrapped
 
     return decorator  # return this "customized" decorator that uses "cachefile"
+
+
+def show_get_texture_pack_window():
+    layout = [
+        [sg.Text("Choose texture pack to load")],
+        [
+            sg.Text("Texture Pack", size=(15, 1)),
+            sg.InputText(key="-file-"),
+            sg.FileBrowse(),
+        ],
+        [sg.Submit(), sg.Cancel()],
+    ]
+
+    window = sg.Window(WINDOW_TITLE, layout)
+    while True:
+        event, values = window.read()
+        if event == sg.WINDOW_CLOSED:
+            break
+        if values["-file-"] and os.path.exists(values["-file-"]):
+            window.close()
+            wad = load_wad(values["-file-"])
+            return (
+                wad,
+                list(wad["flats"].keys()),
+                list(wad["patches"].keys()),
+            )
 
 
 def find_similar(similar_to_index, current, keys, colors, factor, disimilar=False):
@@ -142,8 +206,7 @@ def dominant_colors(image):  # PIL image input
     return colors  # returns colors in order of dominance
 
 
-# todo this should cache based on the passed in file
-@cached(".pickle")
+@cached()
 def load_wad(wad_path):
     wad = WAD(from_file=wad_path)
     from_flat_to_image = {}
@@ -178,57 +241,20 @@ EVENT_RESET = "Reset All"
 
 
 def main():
-    wad_loaded = False
-    wad = None
-    all_flats = None
-    all_patches = None
     flats = []
     patches = []
     similarity_factor = 20
     disimilarity_factor = 40
-    if not wad_loaded:
-        print("loading...")
-        flats = []
-        patches = []
-        wad_loaded = True
-        wad = load_wad(r"C:\Users\Bill Tyros\Documents\GitHub\randtex\tex\OTEX_1.1.WAD")
-        all_flats = list(wad["flats"].keys())
-        all_patches = list(wad["patches"].keys())
+    wad, all_flats, all_patches = show_get_texture_pack_window()
     while True:
         flat_images = []
         for f in flats:
             im = wad["flat_images"][f]
-            bio = io.BytesIO()
-            im = im.copy()
-            im.thumbnail((128, 128))
-            im.save(bio, format="PNG")
-            flat_images += [
-                sg.Frame(
-                    f,
-                    [
-                        create_image_buttons_top(f),
-                        create_image_buttons_bot(f),
-                        [sg.Image(key=f, data=bio.getvalue())],
-                    ],
-                )
-            ]
+            flat_images += create_image(im, f)
         patch_images = []
         for p in patches:
             im = wad["patch_images"][p]
-            bio = io.BytesIO()
-            im = im.copy()
-            im.thumbnail((128, 128))
-            im.save(bio, format="PNG")
-            patch_images += [
-                sg.Frame(
-                    p,
-                    [
-                        create_image_buttons_top(p),
-                        create_image_buttons_bot(p),
-                        [sg.Image(key=p, data=bio.getvalue())],
-                    ],
-                )
-            ]
+            patch_images += create_image(im, p)
         layout = [
             [
                 sg.Text(
@@ -260,20 +286,17 @@ def main():
             [patch_images],
         ]
 
-        # Create the window
-        window = sg.Window("randtex", layout)
+        window = sg.Window(WINDOW_TITLE, layout)
 
         event, values = window.read()
+        if event == sg.WINDOW_CLOSED:
+            break
 
         tex = None
         if event and COMMAND_SEPARATOR in event:
             tex, event = event.split(COMMAND_SEPARATOR, 1)
         print(tex)
         print(event)
-        # See if user wants to quit or window was closed
-        if event == sg.WINDOW_CLOSED:
-            break
-
         try:
             similarity_factor = float(values["-similarity_factor-"])
             if similarity_factor < 0.0 or similarity_factor >= 100.0:
@@ -393,7 +416,6 @@ def main():
                         patches[i] = p
             except ValueError:
                 pass
-        # Finish up by removing from the screen
         window.close()
 
 
