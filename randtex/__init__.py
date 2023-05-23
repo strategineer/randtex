@@ -2,9 +2,7 @@
 # todo click on texture to display a big version of it
 # todo save/load sequence of events/commands
 # todo save/load set of flats/patches
-# todo add initial texture pack browser dialog
 # todo add similar/disimilar flat (for patch) and patch (for flat)
-# todo setup poetry so my dependencies work with each other properly
 
 import pathlib
 
